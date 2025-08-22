@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图片压缩工具</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>图片压缩工具</h1>
+            <p>上传图片，自动压缩后下载</p>
+        </header>
+
+        <main>
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-content">
+                    <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    <h3>拖拽图片到此处</h3>
+                    <p>或点击选择文件</p>
+                    <input type="file" id="fileInput" accept="image/*" multiple hidden>
+                    <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">选择图片</button>
+                </div>
+            </div>
+
+            <div class="options" id="options" style="display: none;">
+                <h3>处理中...</h3>
+                <div class="loading-indicator">
+                    <div class="loading"></div>
+                    <p>正在优化图片质量...</p>
+                </div>
+            </div>
+
+            <div class="preview" id="preview" style="display: none;">
+                <h3>预览</h3>
+                <div class="preview-content">
+                    <div class="original">
+                        <h4>原始图片</h4>
+                        <img id="originalImage" alt="原始图片">
+                        <p id="originalSize"></p>
+                    </div>
+                    <div class="compressed">
+                        <h4>压缩后</h4>
+                        <img id="compressedImage" alt="压缩图片">
+                        <p id="compressedSize"></p>
+                        <p id="compressionRatio"></p>
+                    </div>
+                </div>
+                <button class="btn btn-success" id="downloadBtn">下载压缩图片</button>
+            </div>
+
+            <div class="batch-processing" id="batchProcessing" style="display: none;">
+                <h3>批量处理</h3>
+                <div id="batchList"></div>
+                <button class="btn btn-primary" id="downloadAllBtn">下载全部</button>
+            </div>
+        </main>
+
+        <footer>
+            <p>支持格式: JPG, JPEG, PNG, WebP</p>
+            <p>智能压缩，保持原始清晰度 • 完全本地处理，保护隐私</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
