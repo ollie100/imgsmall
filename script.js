@@ -166,78 +166,147 @@ class ImageCompressor {
     async compressImageFile(file) {
         return new Promise((resolve, reject) => {
             const img = new Image();
-            img.onload = () => {
+            img.onload = async () => {
                 try {
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    
-                    // 智能尺寸调整：只在图片非常大时缩小
-                    let { width, height } = this.calculateOptimalDimensions(img.width, img.height);
-                    
-                    canvas.width = width;
-                    canvas.height = height;
-                    
-                    // 高质量绘制设置
-                    ctx.imageSmoothingEnabled = true;
-                    ctx.imageSmoothingQuality = 'high';
-                    
-                    // 绘制图片
-                    ctx.drawImage(img, 0, 0, width, height);
-                    
-                    // 使用最高质量设置转换为blob
-                    canvas.toBlob(
-                        (blob) => {
-                            if (blob) {
-                                resolve(blob);
-                            } else {
-                                reject(new Error('无法创建压缩图片'));
-                            }
-                        },
-                        file.type,
-                        this.getOptimalQuality(file.type, file.size)
-                    );
+                    // 使用渐进式压缩算法确保文件大小在500KB以内
+                    const compressedBlob = await this.progressiveCompression(img, file);
+                    resolve(compressedBlob);
                 } catch (error) {
-                    reject(error);
+                    console.error('压缩过程失败:', error);
+                    // 如果压缩失败，返回原始文件
+                    resolve(file.slice(0, file.size, file.type));
+                } finally {
+                    // 清理URL对象
+                    URL.revokeObjectURL(img.src);
                 }
             };
             
-            img.onerror = () => reject(new Error('无法加载图片'));
+            img.onerror = () => {
+                console.error('无法加载图片');
+                // 加载失败时返回原始文件
+                resolve(file.slice(0, file.size, file.type));
+            };
+            
+            // 跨域设置，确保可以加载所有来源的图片
+            img.crossOrigin = 'anonymous';
             img.src = URL.createObjectURL(file);
         });
     }
 
-    calculateOptimalDimensions(originalWidth, originalHeight) {
-        // 智能尺寸调整：只在图片非常大时进行适当缩小
-        const maxDimension = 4000; // 4K分辨率
+    calculateOptimalDimensions(originalWidth, originalHeight, fileSize) {
+        // 根据文件大小智能调整尺寸
+        const targetSize = 500 * 1024; // 500KB
+        const maxDimension = 4000; // 4K分辨率上限
         
         let width = originalWidth;
         let height = originalHeight;
         
+        // 首先限制最大尺寸
         if (width > maxDimension || height > maxDimension) {
             const ratio = Math.min(maxDimension / width, maxDimension / height);
             width = Math.round(width * ratio);
             height = Math.round(height * ratio);
         }
         
+        // 如果文件仍然过大，进一步按比例缩小
+        if (fileSize > targetSize * 2) {
+            const reductionFactor = Math.sqrt(targetSize * 2 / fileSize);
+            const newWidth = Math.round(width * reductionFactor);
+            const newHeight = Math.round(height * reductionFactor);
+            
+            // 确保宽度至少为原始宽度的50%，避免过度压缩
+            width = Math.max(newWidth, Math.round(width * 0.5));
+            height = Math.max(newHeight, Math.round(height * 0.5));
+        }
+        
         return { width, height };
     }
 
     getOptimalQuality(fileType, fileSize) {
-        // 根据文件类型和大小智能选择质量
-        const maxSize = 5 * 1024 * 1024; // 5MB
+        // 自适应质量设置，目标是500KB以内
+        const targetSize = 500 * 1024; // 500KB
         
         if (fileType === 'image/jpeg') {
-            // JPEG: 高质量压缩
-            return fileSize > maxSize ? 0.95 : 0.98;
+            if (fileSize > targetSize * 4) return 0.85;  // 超大文件
+            if (fileSize > targetSize * 2) return 0.90;  // 大文件
+            if (fileSize > targetSize) return 0.93;      // 接近目标
+            return 0.95;  // 小文件保持高质量
         } else if (fileType === 'image/png') {
-            // PNG: 无损压缩
-            return 1.0;
+            // PNG文件特殊处理，降低质量或考虑转换格式
+            if (fileSize > targetSize * 2) return 0.80;  // 超大PNG
+            if (fileSize > targetSize) return 0.90;      // 大PNG
+            return 1.0;  // 小PNG无损压缩
         } else if (fileType === 'image/webp') {
-            // WebP: 高质量压缩
-            return fileSize > maxSize ? 0.95 : 0.98;
+            // WebP格式有更好的压缩率
+            if (fileSize > targetSize * 4) return 0.80;
+            if (fileSize > targetSize * 2) return 0.85;
+            if (fileSize > targetSize) return 0.90;
+            return 0.95;
         }
         
-        return 0.95; // 默认高质量
+        return 0.90; // 默认质量
+    }
+    
+    // 渐进式压缩算法，确保文件大小在500KB以内
+    async progressiveCompression(img, originalFile) {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const targetSize = 500 * 1024; // 500KB目标
+        
+        // 设置高质量绘制
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        
+        // 初始尺寸和质量
+        let { width, height } = this.calculateOptimalDimensions(img.width, img.height, originalFile.size);
+        let quality = this.getOptimalQuality(originalFile.type, originalFile.size);
+        
+        // 最多尝试5次渐进式压缩
+        for (let attempt = 0; attempt < 5; attempt++) {
+            canvas.width = width;
+            canvas.height = height;
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // 创建Blob并检查大小
+            const blob = await new Promise((resolve) => {
+                canvas.toBlob(resolve, originalFile.type, quality);
+            });
+            
+            if (!blob) continue;
+            
+            // 如果达到目标大小或已经是最后一次尝试，返回结果
+            if (blob.size <= targetSize || attempt === 4) {
+                // 如果压缩后反而变大，返回原始图片
+                if (blob.size >= originalFile.size * 0.95) {
+                    return originalFile.slice(0, originalFile.size, originalFile.type);
+                }
+                return blob;
+            }
+            
+            // 如果PNG文件太大，可以考虑转换为WebP格式
+            if (originalFile.type === 'image/png' && blob.size > targetSize * 1.5 && attempt === 2) {
+                return new Promise((resolve) => {
+                    canvas.toBlob(resolve, 'image/webp', 0.85);
+                });
+            }
+            
+            // 调整参数进行下一次尝试
+            if (blob.size > targetSize * 1.5) {
+                // 文件仍然太大，缩小尺寸和降低质量
+                const scale = Math.sqrt(targetSize / blob.size);
+                width = Math.round(width * scale * 0.95);
+                height = Math.round(height * scale * 0.95);
+                quality = Math.max(0.7, quality - 0.08);
+            } else {
+                // 接近目标，仅降低质量
+                quality = Math.max(0.75, quality - 0.05);
+            }
+        }
+        
+        // 所有尝试失败，返回最佳结果
+        return new Promise((resolve) => {
+            canvas.toBlob(resolve, originalFile.type, 0.8);
+        });
     }
 
     downloadImage() {
