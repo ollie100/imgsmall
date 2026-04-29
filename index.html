@@ -51,13 +51,19 @@
                         <p id="compressionRatio"></p>
                     </div>
                 </div>
-                <button class="btn btn-success" id="downloadBtn">下载压缩图片</button>
+                <div class="button-group">
+                        <button class="btn btn-success" id="downloadBtn">下载压缩图片</button>
+                        <button class="btn btn-primary" id="downloadPdfBtn">下载PDF文件</button>
+                    </div>
             </div>
 
             <div class="batch-processing" id="batchProcessing" style="display: none;">
                 <h3>批量处理</h3>
                 <div id="batchList"></div>
-                <button class="btn btn-primary" id="downloadAllBtn">下载全部</button>
+                <div class="button-group">
+                    <button class="btn btn-primary" id="downloadAllBtn">下载全部图片</button>
+                    <button class="btn btn-success" id="downloadAllPdfBtn">下载PDF文件</button>
+                </div>
             </div>
         </main>
 
@@ -67,6 +73,6 @@
         </footer>
     </div>
 
-    <script src="script.js"></script>
+    <script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script><script src="script.js"></script>
 </body>
 </html>

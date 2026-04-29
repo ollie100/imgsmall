@@ -21,6 +21,8 @@ class ImageCompressor {
         
         this.downloadBtn = document.getElementById('downloadBtn');
         this.downloadAllBtn = document.getElementById('downloadAllBtn');
+        this.downloadPdfBtn = document.getElementById('downloadPdfBtn');
+        this.downloadAllPdfBtn = document.getElementById('downloadAllPdfBtn');
         this.batchList = document.getElementById('batchList');
     }
 
@@ -47,6 +49,8 @@ class ImageCompressor {
         // 下载按钮
         this.downloadBtn.addEventListener('click', () => this.downloadImage());
         this.downloadAllBtn.addEventListener('click', () => this.downloadAllImages());
+        this.downloadPdfBtn.addEventListener('click', () => this.downloadSinglePdf());
+        this.downloadAllPdfBtn.addEventListener('click', () => this.downloadBatchPdf());
     }
 
     handleFiles(files) {
@@ -103,6 +107,8 @@ class ImageCompressor {
             this.batchList.appendChild(batchItem);
             
             try {
+                this.updateBatchStatus(i, '压缩中...', 'processing');
+                
                 const compressedBlob = await this.compressImageFile(file);
                 this.processedFiles.push({
                     originalFile: file,
@@ -110,6 +116,7 @@ class ImageCompressor {
                     index: i
                 });
                 
+                this.updateBatchCompressionInfo(i, compressedBlob.size);
                 this.updateBatchStatus(i, '完成', 'success');
             } catch (error) {
                 this.updateBatchStatus(i, '失败', 'error');
@@ -128,8 +135,14 @@ class ImageCompressor {
         
         const info = document.createElement('div');
         info.className = 'batch-info';
+        const originalSize = this.formatFileSize(file.size);
         info.innerHTML = `
             <div><strong>${file.name}</strong></div>
+            <div class="batch-size-info">
+                <span class="original-size">原始: <span class="size-value">${originalSize}</span></span>
+                <span class="compressed-size" id="compressed-${index}" style="display: none;">压缩后: <span class="size-value"></span></span>
+            </div>
+            <div class="batch-compression-rate" id="rate-${index}" style="display: none;">压缩率: <span class="rate-value"></span></div>
             <div class="batch-status" id="status-${index}">等待处理...</div>
         `;
         
@@ -142,7 +155,29 @@ class ImageCompressor {
     updateBatchStatus(index, status, type) {
         const statusEl = document.getElementById(`status-${index}`);
         statusEl.textContent = status;
-        statusEl.style.color = type === 'success' ? '#48bb78' : '#e53e3e';
+        statusEl.style.color = type === 'success' ? '#48bb78' : type === 'processing' ? '#3182ce' : '#e53e3e';
+    }
+
+    updateBatchCompressionInfo(index, compressedSize) {
+        const originalFile = this.processedFiles.find(f => f.index === index)?.originalFile;
+        if (!originalFile) return;
+        
+        const originalSize = originalFile.size;
+        const compressedSizeFormatted = this.formatFileSize(compressedSize);
+        
+        const compressedEl = document.getElementById(`compressed-${index}`);
+        const rateEl = document.getElementById(`rate-${index}`);
+        
+        if (compressedEl) {
+            compressedEl.style.display = 'block';
+            compressedEl.querySelector('.size-value').textContent = compressedSizeFormatted;
+        }
+        
+        if (rateEl && originalSize > 0) {
+            const compressionRate = ((originalSize - compressedSize) / originalSize * 100).toFixed(1);
+            rateEl.style.display = 'block';
+            rateEl.querySelector('.rate-value').textContent = `${compressionRate}%`;
+        }
     }
 
     async compressImage(file) {
@@ -352,6 +387,134 @@ class ImageCompressor {
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    async downloadSinglePdf() {
+        if (!this.compressedBlob) {
+            alert('请先处理图片');
+            return;
+        }
+
+        try {
+            const jspdfModule = window.jspdf || { jsPDF: window.jsPDF };
+            const { jsPDF } = jspdfModule;
+            
+            if (!jsPDF || typeof jsPDF !== 'function') {
+                throw new Error('jsPDF库未正确加载');
+            }
+
+            const imgData = await this.blobToBase64(this.compressedBlob);
+            const img = new Image();
+            
+            await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
+                img.src = imgData;
+            });
+
+            const marginPt = 42.52;
+            const pdfWidth = 595.28;
+            const pdfHeight = 841.89;
+            const availableWidth = pdfWidth - marginPt * 2;
+            const availableHeight = pdfHeight - marginPt * 2;
+            
+            const imgWidth = img.width;
+            const imgHeight = img.height;
+
+            const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'pt',
+                format: 'a4'
+            });
+
+            let scale = Math.min(availableWidth / imgWidth, availableHeight / imgHeight);
+            let scaledWidth = imgWidth * scale;
+            let scaledHeight = imgHeight * scale;
+            
+            let x = marginPt + (availableWidth - scaledWidth) / 2;
+            let y = marginPt + (availableHeight - scaledHeight) / 2;
+
+            pdf.addImage(imgData, 'JPEG', x, y, scaledWidth, scaledHeight);
+
+            const originalName = this.currentFile.name;
+            const nameParts = originalName.split('.');
+            nameParts.pop();
+            const nameWithoutExt = nameParts.join('.');
+
+            pdf.save(`${nameWithoutExt}.pdf`);
+        } catch (error) {
+            console.error('生成PDF失败:', error);
+            alert('生成PDF失败，请重试\n错误信息: ' + error.message);
+        }
+    }
+
+    async downloadBatchPdf() {
+        if (this.processedFiles.length === 0) {
+            alert('请先处理图片');
+            return;
+        }
+
+        try {
+            const jspdfModule = window.jspdf || { jsPDF: window.jsPDF };
+            const { jsPDF } = jspdfModule;
+            
+            if (!jsPDF || typeof jsPDF !== 'function') {
+                throw new Error('jsPDF库未正确加载');
+            }
+
+            const marginPt = 42.52;
+            const pdfWidth = 595.28;
+            const pdfHeight = 841.89;
+            const availableWidth = pdfWidth - marginPt * 2;
+            const availableHeight = pdfHeight - marginPt * 2;
+
+            const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'pt',
+                format: 'a4'
+            });
+
+            for (let i = 0; i < this.processedFiles.length; i++) {
+                const fileData = this.processedFiles[i];
+                const imgData = await this.blobToBase64(fileData.compressedBlob);
+                const img = new Image();
+                await new Promise((resolve, reject) => {
+                    img.onload = resolve;
+                    img.onerror = reject;
+                    img.src = imgData;
+                });
+
+                const imgWidth = img.width;
+                const imgHeight = img.height;
+
+                let scale = Math.min(availableWidth / imgWidth, availableHeight / imgHeight);
+                let scaledWidth = imgWidth * scale;
+                let scaledHeight = imgHeight * scale;
+                
+                let x = marginPt + (availableWidth - scaledWidth) / 2;
+                let y = marginPt + (availableHeight - scaledHeight) / 2;
+
+                if (i > 0) {
+                    pdf.addPage();
+                }
+
+                pdf.addImage(imgData, 'JPEG', x, y, scaledWidth, scaledHeight);
+            }
+
+            pdf.save('compressed_images.pdf');
+        } catch (error) {
+            console.error('生成PDF失败:', error);
+            alert('生成PDF失败，请重试\n错误信息: ' + error.message);
+        }
+    }
+
+    blobToBase64(blob) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
     }
 }
 

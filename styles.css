@@ -108,6 +108,13 @@ header p {
     transform: translateY(-1px);
 }
 
+.button-group {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
 .options {
     background: white;
     border-radius: 20px;
@@ -211,6 +218,43 @@ header p {
 .batch-status {
     font-size: 0.9rem;
     color: #666;
+}
+
+.batch-size-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 8px 0;
+    font-size: 0.85rem;
+}
+
+.original-size {
+    color: #666;
+}
+
+.original-size .size-value {
+    font-weight: 600;
+    color: #e53e3e;
+}
+
+.compressed-size {
+    color: #666;
+}
+
+.compressed-size .size-value {
+    font-weight: 600;
+    color: #48bb78;
+}
+
+.batch-compression-rate {
+    font-size: 0.85rem;
+    color: #3182ce;
+    margin-top: 4px;
+}
+
+.batch-compression-rate .rate-value {
+    font-weight: 600;
+    color: #38a169;
 }
 
 footer {
