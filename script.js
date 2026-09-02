@@ -292,37 +292,44 @@ class ImageCompressor {
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         
+        // PNG图片转换为JPG格式进行压缩
+        const isPng = originalFile.type === 'image/png';
+        const outputType = isPng ? 'image/jpeg' : originalFile.type;
+        const outputExtension = isPng ? 'jpg' : (originalFile.name.split('.').pop() || 'jpg');
+        
         // 初始尺寸和质量
         let { width, height } = this.calculateOptimalDimensions(img.width, img.height, originalFile.size);
-        let quality = this.getOptimalQuality(originalFile.type, originalFile.size);
+        let quality = isPng 
+            ? this.getOptimalQuality('image/jpeg', originalFile.size)
+            : this.getOptimalQuality(originalFile.type, originalFile.size);
         
         // 最多尝试5次渐进式压缩
         for (let attempt = 0; attempt < 5; attempt++) {
             canvas.width = width;
             canvas.height = height;
+            
+            // JPG不支持透明度，需要先填充白色背景
+            if (isPng) {
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, width, height);
+            }
+            
             ctx.drawImage(img, 0, 0, width, height);
             
             // 创建Blob并检查大小
             const blob = await new Promise((resolve) => {
-                canvas.toBlob(resolve, originalFile.type, quality);
+                canvas.toBlob(resolve, outputType, quality);
             });
             
             if (!blob) continue;
             
             // 如果达到目标大小或已经是最后一次尝试，返回结果
             if (blob.size <= targetSize || attempt === 4) {
-                // 如果压缩后反而变大，返回原始图片
-                if (blob.size >= originalFile.size * 0.95) {
+                // 如果压缩后反而变大，返回原始图片（转换为JPG后的版本）
+                if (blob.size >= originalFile.size * 0.95 && !isPng) {
                     return originalFile.slice(0, originalFile.size, originalFile.type);
                 }
                 return blob;
-            }
-            
-            // 如果PNG文件太大，可以考虑转换为WebP格式
-            if (originalFile.type === 'image/png' && blob.size > targetSize * 1.5 && attempt === 2) {
-                return new Promise((resolve) => {
-                    canvas.toBlob(resolve, 'image/webp', 0.85);
-                });
             }
             
             // 调整参数进行下一次尝试
@@ -340,7 +347,7 @@ class ImageCompressor {
         
         // 所有尝试失败，返回最佳结果
         return new Promise((resolve) => {
-            canvas.toBlob(resolve, originalFile.type, 0.8);
+            canvas.toBlob(resolve, outputType, 0.8);
         });
     }
 
@@ -352,8 +359,14 @@ class ImageCompressor {
         
         const originalName = this.currentFile.name;
         const nameParts = originalName.split('.');
-        const extension = nameParts.pop();
+        const originalExtension = nameParts.pop().toLowerCase();
         const nameWithoutExt = nameParts.join('.');
+        
+        // 如果原始文件是PNG，且压缩后的blob是JPEG类型，则使用jpg扩展名
+        let extension = originalExtension;
+        if (originalExtension === 'png' && this.compressedBlob.type === 'image/jpeg') {
+            extension = 'jpg';
+        }
         
         link.download = `${nameWithoutExt}_compressed.${extension}`;
         link.click();
@@ -368,8 +381,14 @@ class ImageCompressor {
             
             const originalName = fileData.originalFile.name;
             const nameParts = originalName.split('.');
-            const extension = nameParts.pop();
+            const originalExtension = nameParts.pop().toLowerCase();
             const nameWithoutExt = nameParts.join('.');
+            
+            // 如果原始文件是PNG，且压缩后的blob是JPEG类型，则使用jpg扩展名
+            let extension = originalExtension;
+            if (originalExtension === 'png' && fileData.compressedBlob.type === 'image/jpeg') {
+                extension = 'jpg';
+            }
             
             link.download = `${nameWithoutExt}_compressed.${extension}`;
             link.click();

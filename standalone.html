@@ -546,6 +546,16 @@
                             ctx.imageSmoothingEnabled = true;
                             ctx.imageSmoothingQuality = 'high';
                             
+                            // PNG图片转换为JPG格式进行压缩
+                            const isPng = file.type === 'image/png';
+                            const outputType = isPng ? 'image/jpeg' : file.type;
+                            
+                            // JPG不支持透明度，需要先填充白色背景
+                            if (isPng) {
+                                ctx.fillStyle = '#FFFFFF';
+                                ctx.fillRect(0, 0, width, height);
+                            }
+                            
                             ctx.drawImage(img, 0, 0, width, height);
                             
                             canvas.toBlob(
@@ -556,8 +566,10 @@
                                         reject(new Error('无法创建优化图片'));
                                     }
                                 },
-                                file.type,
-                                this.getOptimalQuality(file.type, file.size)
+                                outputType,
+                                isPng 
+                                    ? this.getOptimalQuality('image/jpeg', file.size)
+                                    : this.getOptimalQuality(file.type, file.size)
                             );
                         } catch (error) {
                             reject(error);
@@ -605,8 +617,14 @@
                 
                 const originalName = this.currentFile.name;
                 const nameParts = originalName.split('.');
-                const extension = nameParts.pop();
+                const originalExtension = nameParts.pop().toLowerCase();
                 const nameWithoutExt = nameParts.join('.');
+                
+                // 如果原始文件是PNG，且压缩后的blob是JPEG类型，则使用jpg扩展名
+                let extension = originalExtension;
+                if (originalExtension === 'png' && this.compressedBlob.type === 'image/jpeg') {
+                    extension = 'jpg';
+                }
                 
                 link.download = `${nameWithoutExt}_optimized.${extension}`;
                 link.click();
@@ -621,8 +639,14 @@
                     
                     const originalName = fileData.originalFile.name;
                     const nameParts = originalName.split('.');
-                    const extension = nameParts.pop();
+                    const originalExtension = nameParts.pop().toLowerCase();
                     const nameWithoutExt = nameParts.join('.');
+                    
+                    // 如果原始文件是PNG，且压缩后的blob是JPEG类型，则使用jpg扩展名
+                    let extension = originalExtension;
+                    if (originalExtension === 'png' && fileData.compressedBlob.type === 'image/jpeg') {
+                        extension = 'jpg';
+                    }
                     
                     link.download = `${nameWithoutExt}_optimized.${extension}`;
                     link.click();
